@@ -12,7 +12,7 @@ Rcon = Tensor(Rcon_const, dtype=dtypes.uint8)
 
 def xtime(a: Tensor) -> Tensor:
     shifted = a.lshift(1)
-    return (a.bitwise_and(0x80) != 0).where(shifted.xor(0x1B), shifted).cast(dtypes.uint8)
+    return (a.bitwise_and(0x80) != 0).where(shifted ^ 0x1B, shifted).cast(dtypes.uint8)
 
 
 def text2matrix(text: int) -> Tensor:
@@ -45,9 +45,9 @@ class AES:
 
                 shifted_indices = Tensor([2, 3, 0], dtype=dtypes.uint8)
                 sboxed = Sbox[self.round_keys[i - 1][shifted_indices]]
-                self.round_keys[i, 1:] = self.round_keys[i - 4, 1:].xor(sboxed)
+                self.round_keys[i, 1:] = self.round_keys[i - 4, 1:] ^ sboxed
             else:
-                self.round_keys[i] = self.round_keys[i - 4].xor(self.round_keys[i - 1])
+                self.round_keys[i] = self.round_keys[i - 4] ^ self.round_keys[i - 1]
 
     def encrypt(self, plaintext: int) -> int:
         self.plain_state = text2matrix(plaintext)
@@ -92,7 +92,7 @@ class AES:
         self.__inv_sub_bytes(state_matrix)
 
     def __add_round_key(self, s: Tensor, k: Tensor) -> Tensor:
-        s.assign(s.xor(k))
+        s.assign(s ^ k)
 
     def __sub_bytes(self, s: Tensor) -> Tensor:
         s.assign(Sbox[s])
@@ -116,20 +116,20 @@ class AES:
         s.assign(_s)
 
     def __mix_columns(self, s: Tensor) -> Tensor:
-        t = s[:, 0].xor(s[:, 1]).xor(s[:, 2]).xor(s[:, 3])
-        xtimes = xtime(s.roll(-1, dims=1).xor(s)).contiguous()
-        s.assign(s.xor(t.unsqueeze(1)).xor(xtimes))
+        t = s[:, 0] ^ s[:, 1] ^ s[:, 2] ^ s[:, 3]
+        xtimes = xtime(s.roll(-1, dims=1) ^ s).contiguous()
+        s.assign(s ^ t.unsqueeze(1) ^ xtimes)
 
 
     def __inv_mix_columns(self, s: Tensor) -> Tensor:
-        u = xtime(xtime(s[:, 0].xor(s[:, 2])))
-        v = xtime(xtime(s[:, 1].xor(s[:, 3])))
+        u = xtime(xtime(s[:, 0] ^ s[:, 2]))
+        v = xtime(xtime(s[:, 1] ^ s[:, 3]))
 
         _s = s.clone()
-        _s[:, 0] = s[:, 0].xor(u)
-        _s[:, 1] = s[:, 1].xor(v)
-        _s[:, 2] = s[:, 2].xor(u)
-        _s[:, 3] = s[:, 3].xor(v)
+        _s[:, 0] = s[:, 0] ^ u
+        _s[:, 1] = s[:, 1] ^ v
+        _s[:, 2] = s[:, 2] ^ u
+        _s[:, 3] = s[:, 3] ^ v
 
         self.__mix_columns(_s)
         s.assign(_s)
